@@ -90,9 +90,7 @@ const Index = () => {
 
       <footer className="border-t py-6">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>
-            © {new Date().getFullYear()} Lingua Travel. All rights reserved.
-          </p>
+          <p>© {new Date().getFullYear()} Navigato. All rights reserved.</p>
         </div>
       </footer>
     </div>
