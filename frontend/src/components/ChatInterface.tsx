@@ -1,93 +1,111 @@
-"use client";
-import React, { useState, useRef, useEffect } from "react";
-import { Send } from "lucide-react";
-import ChatMessage from "@/components/ChatMessage";
-import TypingIndicator from "@/components/TypingIndicator";
-import LanguageSelector from "./LanguageSelector";
-import { useChat } from "@/app/hooks/useChat";
+"use client"
 
-const ChatInterface: React.FC = () => {
-  const [input, setInput] = useState("");
-  const { messages, currentAgent, isTyping, sendMessage, changeLanguage } =
-    useChat();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+import type React from "react"
 
-  // Auto scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { queryWeather } from "@/app/api/query/route"
+import WeatherDisplay from "@/components/WeatherDisplay"
 
-  // Focus input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+export default function WeatherQueryPage() {
+  const [inputText, setInputText] = useState("")
+  const [city, setCity] = useState("")
+  const [country, setCountry] = useState("")
+  const [searchContextSize, setSearchContextSize] = useState("medium")
+  const [response, setResponse] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (input.trim()) {
-      sendMessage(input);
-      setInput("");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    try {
+      const result = await queryWeather({
+        input_text: inputText,
+        city: city || undefined,
+        country: country || undefined,
+        search_context_size: searchContextSize,
+      })
+
+      setResponse(result.response)
+    } catch (error) {
+      console.error("Error querying weather:", error)
+      setResponse("Error: Failed to get response from the server")
+    } finally {
+      setIsLoading(false)
     }
-  };
+  }
 
   return (
-    <div className="flex flex-col h-[80vh] max-w-3xl mx-auto bg-background rounded-2xl shadow-lg border border-border overflow-hidden">
-      <div className="flex justify-between items-center px-4 py-3 border-b">
-        <h2 className="text-lg font-medium">Travel Concierge</h2>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-muted-foreground">
-            {currentAgent.flag} {currentAgent.name}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            content={message.content}
-            isUser={message.isUser}
-            agent={message.agent}
-            timestamp={message.timestamp}
-          />
-        ))}
-        {isTyping && (
-          <div className="flex">
-            <div className={`${currentAgent.color} rounded-2xl`}>
-              <TypingIndicator />
+    <div className="container mx-auto py-10">
+      <Card className="max-w-3xl mx-auto">
+        <CardHeader>
+          <CardTitle>AgentOps OpenAISDK Handoff Multiagent</CardTitle>
+          <CardDescription>Ask about weather conditions, forecasts, and travel recommendations</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="inputText">Query</Label>
+              <Input
+                id="inputText"
+                placeholder="What's the weather like in New York?"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                required
+              />
             </div>
-          </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="city">City (Optional)</Label>
+                <Input id="city" placeholder="New York" value={city} onChange={(e) => setCity(e.target.value)} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="country">Country (Optional)</Label>
+                <Input id="country" placeholder="USA" value={country} onChange={(e) => setCountry(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="searchContextSize">Search Context Size</Label>
+              <Select value={searchContextSize} onValueChange={setSearchContextSize}>
+                <SelectTrigger id="searchContextSize">
+                  <SelectValue placeholder="Select context size" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Querying..." : "Submit Query"}
+            </Button>
+          </form>
+        </CardContent>
+
+        {response && (
+          <CardFooter className="flex flex-col items-start">
+            <h3 className="font-medium mb-2">Response:</h3>
+            <div className="w-full">
+              {response.startsWith("Error") ? (
+                <div className="p-4 bg-red-50 text-red-800 rounded-md">{response}</div>
+              ) : (
+                <WeatherDisplay markdown={response} />
+              )}
+            </div>
+          </CardFooter>
         )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div className="border-t">
-        <LanguageSelector
-          currentLanguage={currentAgent.language}
-          onSelectLanguage={changeLanguage}
-        />
-
-        <form onSubmit={handleSubmit} className="flex items-center p-4">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about travel destinations..."
-            className="flex-1 bg-muted border-0 focus:ring-0 rounded-full px-4 py-2 focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="ml-2 bg-primary text-primary-foreground rounded-full p-2 hover:bg-primary/90 transition-colors"
-            disabled={!input.trim()}
-          >
-            <Send className="h-5 w-5" />
-          </button>
-        </form>
-      </div>
+      </Card>
     </div>
-  );
-};
+  )
+}
 
-export default ChatInterface;
