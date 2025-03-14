@@ -1,157 +1,173 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Agent, Language, getAgentByLanguage } from "@/utils/agents";
+import { useState, useCallback } from "react"
+import { v4 as uuidv4 } from "uuid"
+import { queryWeather } from "@/app/api/query/route"
 
-export interface Message {
-  id: string;
-  content: string;
-  isUser: boolean;
-  agent?: Agent;
-  timestamp: Date;
+// Define types
+export type Agent = {
+  name: string
+  language: string
+  flag: string
+  color: string
+}
+
+export type Message = {
+  id: string
+  content: string
+  isUser: boolean
+  agent: Agent
+  timestamp: Date
+}
+
+// Available agents
+const agents: Record<string, Agent> = {
+  english: {
+    name: "English Assistant",
+    language: "english",
+    flag: "🇺🇸",
+    color: "bg-blue-100",
+  },
+  spanish: {
+    name: "Asistente Español",
+    language: "spanish",
+    flag: "🇪🇸",
+    color: "bg-yellow-100",
+  },
+  french: {
+    name: "Assistant Français",
+    language: "french",
+    flag: "🇫🇷",
+    color: "bg-red-100",
+  },
 }
 
 export function useChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [currentAgent, setCurrentAgent] = useState<Agent>(
-    getAgentByLanguage("english")
-  );
-  const [isTyping, setIsTyping] = useState(false);
-  const messageIdCounter = useRef(0);
-
-  // Add initial greeting from the main agent
-  useEffect(() => {
-    const initialGreeting: Message = {
-      id: `msg-${messageIdCounter.current++}`,
-      content: currentAgent.greeting,
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: uuidv4(),
+      content: "Hello! I'm your travel concierge. How can I help you today?",
       isUser: false,
-      agent: currentAgent,
+      agent: agents.english,
       timestamp: new Date(),
-    };
+    },
+  ])
+  const [currentAgent, setCurrentAgent] = useState<Agent>(agents.english)
+  const [isTyping, setIsTyping] = useState(false)
 
-    setMessages([initialGreeting]);
-  }, []);
+  // Extract location from message if possible
+  const extractLocation = (message: string): { city?: string; country?: string } => {
+    // This is a simple implementation - in a real app, you'd use NLP or regex patterns
+    const cityMatch = message.match(/in\s+([A-Za-z\s]+)(?:,|\s+in|\s+of|\s+at)/i)
+    const countryMatch = message.match(/(?:,|in|of|at)\s+([A-Za-z\s]+)$/i)
 
-  // Handle language change
-  const changeLanguage = useCallback((language: Language) => {
-    const newAgent = getAgentByLanguage(language);
-    setCurrentAgent(newAgent);
-
-    // Add a transition message
-    if (language !== "english") {
-      // Add a handoff message from the English agent
-      const handoffMessage: Message = {
-        id: `msg-${messageIdCounter.current++}`,
-        content: `Let me connect you with our ${language} specialist, ${newAgent.name}.`,
-        isUser: false,
-        agent: getAgentByLanguage("english"),
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, handoffMessage]);
-
-      // Simulate typing indicator
-      setIsTyping(true);
-
-      // Add a greeting from the new agent after a delay
-      setTimeout(() => {
-        const greetingMessage: Message = {
-          id: `msg-${messageIdCounter.current++}`,
-          content: newAgent.greeting,
-          isUser: false,
-          agent: newAgent,
-          timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, greetingMessage]);
-        setIsTyping(false);
-      }, 2000);
+    return {
+      city: cityMatch ? cityMatch[1].trim() : undefined,
+      country: countryMatch ? countryMatch[1].trim() : undefined,
     }
-  }, []);
+  }
 
-  // Send a message
+  // Determine if a message is a weather query
+  const isWeatherQuery = (message: string): boolean => {
+    const weatherKeywords = [
+      "weather",
+      "temperature",
+      "forecast",
+      "rain",
+      "sunny",
+      "cloudy",
+      "hot",
+      "cold",
+      "warm",
+      "climate",
+    ]
+
+    return weatherKeywords.some((keyword) => message.toLowerCase().includes(keyword))
+  }
+
   const sendMessage = useCallback(
-    (content: string) => {
-      if (!content.trim()) return;
-
+    async (content: string) => {
       // Add user message
       const userMessage: Message = {
-        id: `msg-${messageIdCounter.current++}`,
+        id: uuidv4(),
         content,
         isUser: true,
+        agent: currentAgent,
         timestamp: new Date(),
-      };
+      }
 
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) => [...prev, userMessage])
+      setIsTyping(true)
 
-      // Simulate typing indicator
-      setIsTyping(true);
+      try {
+        let responseContent = ""
 
-      // Simulate response based on simple keywords
-      setTimeout(() => {
-        // In a real implementation, this would be an API call to a language model
-        let responseContent = "";
+        // Check if it's a weather query
+        if (isWeatherQuery(content)) {
+          const { city, country } = extractLocation(content)
 
-        // Simple response logic based on keywords - in a real app this would be an API call
-        if (
-          content.toLowerCase().includes("hello") ||
-          content.toLowerCase().includes("hi")
-        ) {
-          responseContent = `Hello there! How can I help with your travel plans?`;
-        } else if (
-          content.toLowerCase().includes("france") ||
-          content.toLowerCase().includes("paris")
-        ) {
-          if (currentAgent.language !== "french") {
-            // Switch to French agent
-            changeLanguage("french");
-            setIsTyping(false);
-            return;
-          } else {
-            responseContent = `Paris is beautiful in the spring! Would you like recommendations for the top attractions or some hidden gems?`;
-          }
-        } else if (
-          content.toLowerCase().includes("spain") ||
-          content.toLowerCase().includes("barcelona")
-        ) {
-          if (currentAgent.language !== "spanish") {
-            // Switch to Spanish agent
-            changeLanguage("spanish");
-            setIsTyping(false);
-            return;
-          } else {
-            responseContent = `Barcelona is known for its stunning architecture and vibrant culture. Are you interested in Gaudí's works or the local cuisine?`;
-          }
-        } else if (
-          content.toLowerCase().includes("japan") ||
-          content.toLowerCase().includes("tokyo")
-        ) {
-          if (currentAgent.language !== "japanese") {
-            // Switch to Japanese agent
-            changeLanguage("japanese");
-            setIsTyping(false);
-            return;
-          } else {
-            responseContent = `Tokyo is a fascinating blend of traditional and ultramodern! Are you planning to visit during cherry blossom season?`;
-          }
+          // Use the server action instead of direct fetch
+          const result = await queryWeather({
+            input_text: content,
+            city,
+            country,
+            search_context_size: "medium", // Use string value directly
+          })
+
+          responseContent = result.response
         } else {
-          responseContent = `I'd be happy to help with that! Could you provide more details about your travel plans?`;
+          // For non-weather queries, you could use a different API or fallback response
+          responseContent = `As your travel concierge, I'd be happy to help with your travel plans. ${content.includes("?") ? "Could you provide more details about your destination or specific travel needs?" : "What specific information are you looking for?"}`
+
+          // Simulate API delay
+          await new Promise((resolve) => setTimeout(resolve, 1000))
         }
 
-        const agentResponse: Message = {
-          id: `msg-${messageIdCounter.current++}`,
+        // Add assistant response
+        const assistantMessage: Message = {
+          id: uuidv4(),
           content: responseContent,
           isUser: false,
           agent: currentAgent,
           timestamp: new Date(),
-        };
+        }
 
-        setMessages((prev) => [...prev, agentResponse]);
-        setIsTyping(false);
-      }, 1500);
+        setMessages((prev) => [...prev, assistantMessage])
+      } catch (error) {
+        console.error("Error sending message:", error)
+
+        // Add error message
+        const errorMessage: Message = {
+          id: uuidv4(),
+          content: "Sorry, I encountered an error. Please try again later.",
+          isUser: false,
+          agent: currentAgent,
+          timestamp: new Date(),
+        }
+
+        setMessages((prev) => [...prev, errorMessage])
+      } finally {
+        setIsTyping(false)
+      }
     },
-    [currentAgent, changeLanguage]
-  );
+    [currentAgent],
+  )
+
+  const changeLanguage = useCallback((language: string) => {
+    const newAgent = agents[language] || agents.english
+    setCurrentAgent(newAgent)
+
+    // Add system message about language change
+    const systemMessage: Message = {
+      id: uuidv4(),
+      content: `Switched to ${newAgent.name}`,
+      isUser: false,
+      agent: newAgent,
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, systemMessage])
+  }, [])
 
   return {
     messages,
@@ -159,5 +175,6 @@ export function useChat() {
     isTyping,
     sendMessage,
     changeLanguage,
-  };
+  }
 }
+
